@@ -32,14 +32,14 @@ namespace Game.Domain
 
         public UserEntity GetOrCreateByLogin(string login)
         {
-            var user = userCollection.Find(u => u.Login == login).FirstOrDefault();
-            if (user is not null)
+            try
             {
-                return user;
+                return Insert(new(Guid.NewGuid()) { Login = login });
             }
-            var createdUser = new UserEntity(Guid.NewGuid()) { Login = login };
-            userCollection.InsertOne(createdUser);
-            return createdUser;
+            catch (MongoWriteException)
+            {
+                return userCollection.Find(u => u.Login == login).FirstOrDefault();
+            }
         }
 
         public void Update(UserEntity user)
