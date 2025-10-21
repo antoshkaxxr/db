@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using Game.Domain;
+using MongoDB.Driver;
 
 namespace ConsoleApp
 {
@@ -10,15 +11,18 @@ namespace ConsoleApp
         private readonly IGameRepository gameRepo;
         private readonly Random random = new Random();
 
-        private Program(string[] args)
+        private Program(string[] args, IMongoDatabase mongoDatabase)
         {
-            userRepo = new InMemoryUserRepository();
-            gameRepo = new InMemoryGameRepository();
+            userRepo = new MongoUserRepository(mongoDatabase);
+            gameRepo = new MongoGameRepository(mongoDatabase);
         }
 
         public static void Main(string[] args)
         {
-            new Program(args).RunMenuLoop();
+            var mongoConnectionString = Environment.GetEnvironmentVariable("PROJECT5100_MONGO_CONNECTION_STRING") ?? "mongodb://admin:admin@localhost:27017?maxConnecting=100";
+            var mongoClient = new MongoClient(mongoConnectionString);
+            var mongoDatabase = mongoClient.GetDatabase("game");
+            new Program(args, mongoDatabase).RunMenuLoop();
         }
 
         private void RunMenuLoop()
@@ -33,8 +37,7 @@ namespace ConsoleApp
             }
 
             while (HandleOneGameTurn(humanUser.Id))
-            {
-            }
+            { }
 
             Console.WriteLine("Game is finished");
             Console.ReadLine();
@@ -82,16 +85,16 @@ namespace ConsoleApp
 
         private static bool IsUserInGame(UserEntity user, GameEntity game)
         {
-            return user.CurrentGameId.HasValue
-                   && user.CurrentGameId.Value == game.Id
-                   && game.Players.Any(p => p.UserId == user.Id);
+            return user.CurrentGameId.HasValue && user.CurrentGameId.Value == game.Id && game.Players.Any(p => p.UserId == user.Id);
         }
 
         private GameEntity FindCurrentGame(UserEntity humanUser)
         {
             if (humanUser.CurrentGameId == null) return null;
+
             var game = gameRepo.FindById(humanUser.CurrentGameId.Value);
             if (game == null) return null;
+
             switch (game.Status)
             {
                 case GameStatus.WaitingToStart:
@@ -118,6 +121,7 @@ namespace ConsoleApp
             PlayerDecision? decision = AskHumanDecision();
             if (!decision.HasValue)
                 return false;
+
             game.SetPlayerDecision(humanUserId, decision.Value);
 
             var aiPlayer = game.Players.First(p => p.UserId != humanUserId);
@@ -154,6 +158,7 @@ namespace ConsoleApp
             {
                 var playerUser = userRepo.FindById(player.UserId);
                 if (playerUser == null) continue;
+
                 playerUser.ExitGame();
                 userRepo.Update(playerUser);
             }
